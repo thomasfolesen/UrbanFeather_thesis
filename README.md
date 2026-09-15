@@ -125,7 +125,33 @@ The project also builds on the original FEATHER method by Benedek Rozemberczki a
 For citation details of the predecessor project, see the included `CITATION.cff` file.
 
 
-## Old README.md
+## Marimo
+
+Marimo is available through the Pixi environment for interactive exploration and experimentation.
+
+Launch the FEATHER smoke notebook in edit mode:
+
+```bash
+pixi run marimo-edit
+```
+
+Run it as an app:
+
+```bash
+pixi run marimo-run
+```
+
+The current marimo notebooks are stored under:
+
+```text
+notebooks/marimo/
+```
+
+Reusable project logic should remain in regular Python modules under `src/`; marimo is intended as an interactive layer rather than the only location for important implementation logic.
+
+The current FEATHER integration still uses the legacy source layout, so the marimo smoke notebook adjusts `sys.path` to import the bundled FEATHER implementation without refactoring it.
+
+# Old README.md
 <img src="feather_order_4.png" alt="This image shows a map with magnitude values calculated from the Feather ML-Algorithm. on the right side is the moving (transport) to the left is all Amenity nodes combined" >
 
 This repository contains a research oriented project exploring **accessibility analysis based on the 15-minute city concept**, with a focus on comparing traditional accessibility approched with a FEATHER based approch.

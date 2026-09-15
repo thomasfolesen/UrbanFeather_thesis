@@ -20,6 +20,7 @@ shapely = ">=2.1.2,<3"
 pyproj = ">=3.7.1,<4"
 pyogrio = ">=0.11.0,<0.12"
 pandana = ">=0.8,<0.9"
+marimo = ">=0.24.0,<0.25"
 
 
 [tasks]
@@ -77,3 +78,6 @@ python src/Utils/OSM2FeatherConverter.py \
   --theta-max 1.0 \
   --plotorders 0
 """
+
+marimo-edit = "marimo edit notebooks/marimo/feather_smoke.py"
+marimo-run = "marimo run notebooks/marimo/feather_smoke.py"
