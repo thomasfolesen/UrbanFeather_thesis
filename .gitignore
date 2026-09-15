@@ -32,3 +32,9 @@ replay_pid*
 /src/graphs/data
 /notes/.ipynb_checkpoints
 /src/Utils/projects
+
+__pycache__/
+*.py[cod]
+
+# Pixi local environment
+.pixi/

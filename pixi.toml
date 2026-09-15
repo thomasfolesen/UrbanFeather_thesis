@@ -1,0 +1,79 @@
+[workspace]
+channels = [
+    "conda-forge",
+]
+platforms = ["linux-64", "win-64"]
+
+[dependencies]
+python = "3.10.*"
+numpy = ">=2.2.6,<3"
+pandas = ">=2.3.3,<3"
+scipy = ">=1.15.2,<2"
+networkx = ">=3.4.2,<4"
+tqdm = ">=4.70.0,<5"
+texttable = ">=1.7.0,<2"
+matplotlib = ">=3.10.9,<4"
+scikit-learn = ">=1.7.2,<2"
+osmnx = ">=2.0.7,<3"
+geopandas = ">=1.1.4,<2"
+shapely = ">=2.1.2,<3"
+pyproj = ">=3.7.1,<4"
+pyogrio = ">=0.11.0,<0.12"
+pandana = ">=0.8,<0.9"
+
+
+[tasks]
+smoke-feather = """
+python -c "
+import sys;
+sys.path.insert(0, 'src/Utils/FEATHER/src');
+from types import SimpleNamespace;
+import networkx as nx;
+import numpy as np;
+from feather import FEATHER;
+
+G = nx.path_graph(4);
+features = np.array([[1.0],[2.0],[3.0],[4.0]]);
+args = SimpleNamespace(theta_max=1.0, eval_points=2, order=1);
+
+model = FEATHER();
+model.fit(G, features, args);
+embedding = model.get_embedding();
+
+print('shape:', embedding.shape);
+print('finite:', np.isfinite(embedding).all());
+assert embedding.shape == (4, 4);
+assert np.isfinite(embedding).all();
+"
+"""
+
+smoke-imports = """
+python -c "
+import sys;
+sys.path.insert(0, 'src/Utils');
+sys.path.insert(0, 'src/Utils/FEATHER/src');
+
+import OSM2FeatherConverter;
+import osmnx;
+import geopandas;
+import shapely;
+import pyproj;
+import pyogrio;
+import pandana;
+
+print('UrbanFeather imports: OK');
+"
+"""
+
+smoke-osm = """
+PYTHONPATH="src/Utils:src/Utils/FEATHER/src" \
+python src/Utils/OSM2FeatherConverter.py \
+  --title pixi_smoke_osm \
+  --output ./output \
+  --type BBOX \
+  --bbox 12.5650 55.6750 12.5700 55.6800 \
+  --eval-points 2 \
+  --order 1 \
+  --theta-max 1.0 \
+  --plotorders 0
+"""

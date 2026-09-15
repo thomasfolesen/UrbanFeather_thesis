@@ -63,29 +63,31 @@ def load_graph(args):
 import numpy as np
 
 def precompute_magnitudes(features, osm_node_ids, osmid_to_feather, categories, orders, plotorders):
-    # Gets all of the id's from osm thats a part of the FeatherResult.csv
+    # Gets all of the IDs from OSM that are part of FeatherResult.csv
     feather_ids = [osmid_to_feather[osm_id] for osm_id in osm_node_ids]
-    
+
     f_aligned = features.reindex(feather_ids)
     mag_cache = {}
 
+    plotorders_int = [int(x) for x in plotorders]
+
     for cat in categories:
         for order in orders:
-            if order not in plotorders : 
+            if order not in plotorders_int:
                 continue
-            # Seperate the columns by cat order and real/img
+
+            # Separate the columns by category, order, and real/img
             r_cols = [c for c in f_aligned.columns if f'{cat}_real_{order}' in c]
             i_cols = [c for c in f_aligned.columns if f'{cat}_img_{order}' in c]
 
-            #Calculate hte real and img sum of the evalpoints 
+            # Calculate the real and imaginary sums across evaluation points
             r_sum = f_aligned[r_cols].sum(axis=1).values if r_cols else 0
             i_sum = f_aligned[i_cols].sum(axis=1).values if i_cols else 0
-            
-            #Sum the real and img values together for the combined magnitude
-            mag_cache[(cat, order)] = (r_sum + i_sum)
+
+            # Sum the real and imaginary values for the combined magnitude
+            mag_cache[(cat, order)] = r_sum + i_sum
 
     return mag_cache
-
 
 # ---------------------------------------------------------------------------
 # Main draw function
