@@ -47,7 +47,6 @@ assert np.isfinite(embedding).all();
 "
 """
 
-
 smoke-imports = """
 python -c "
 import sys;
@@ -64,4 +63,17 @@ import pandana;
 
 print('UrbanFeather imports: OK');
 "
+"""
+
+smoke-osm = """
+PYTHONPATH="src/Utils:src/Utils/FEATHER/src" \
+python src/Utils/OSM2FeatherConverter.py \
+  --title pixi_smoke_osm \
+  --output ./output \
+  --type BBOX \
+  --bbox 12.5650 55.6750 12.5700 55.6800 \
+  --eval-points 2 \
+  --order 1 \
+  --theta-max 1.0 \
+  --plotorders 0
 """

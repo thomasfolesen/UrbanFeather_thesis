@@ -276,7 +276,7 @@ def Convert(args):
                   'feature_input': args.output + '/'+ args.title + '/Features.csv',
                   'output': args.output + '/'+ args.title +  '/FeatherResult.csv', 
                   'eval_points':args.eval_points,
-                  'order': int(args.order),
+                  'order': args.order,
                   'theta_max':args.theta_max,
                   'model_type': 'FEATHER',
                   'plotorders' : args.plotorders
@@ -288,7 +288,7 @@ def Convert(args):
     # ----------------------------------------------------------------------
     # PLOT the Feather Results
     # ----------------------------------------------------------------------
-    FeatherMapPlotter.Draw(SimpleNamespace(featherargs), G, featherIDtoOSMID)
+    FeatherMapPlotter.Draw(SimpleNamespace(**featherargs), G, featherIDtoOSMID)
 
 
 # ---------------------------------------------------------------------------
@@ -424,9 +424,9 @@ if __name__ == "__main__":
     parser.add_argument("--pandana", type=bool, default=False)
     
     #- Feather Settings -#
-    parser.add_argument("--eval-points", default=25)
-    parser.add_argument("--order", default=5)
-    parser.add_argument("--theta-max", default=2.5)
+    parser.add_argument("--eval-points", type=int, default=25)
+    parser.add_argument("--order", type=int, default=5)
+    parser.add_argument("--theta-max", type=float, default=2.5)
     
     #- Plot -#
     parser.add_argument('--plotorders', nargs='+', type=str, help='List of orders to plot')
