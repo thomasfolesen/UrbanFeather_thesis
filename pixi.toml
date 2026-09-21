@@ -24,29 +24,7 @@ marimo = ">=0.24.0,<0.25"
 
 
 [tasks]
-smoke-feather = """
-python -c "
-import sys;
-sys.path.insert(0, 'src/Utils/FEATHER/src');
-from types import SimpleNamespace;
-import networkx as nx;
-import numpy as np;
-from feather import FEATHER;
-
-G = nx.path_graph(4);
-features = np.array([[1.0],[2.0],[3.0],[4.0]]);
-args = SimpleNamespace(theta_max=1.0, eval_points=2, order=1);
-
-model = FEATHER();
-model.fit(G, features, args);
-embedding = model.get_embedding();
-
-print('shape:', embedding.shape);
-print('finite:', np.isfinite(embedding).all());
-assert embedding.shape == (4, 4);
-assert np.isfinite(embedding).all();
-"
-"""
+smoke-feather = "python tests/smoke_feather.py"
 
 smoke-imports = """
 python -c "
