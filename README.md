@@ -37,31 +37,313 @@ Expected output:
 UrbanFeather imports: OK
 ```
 
-To verify that the bundled FEATHER implementation can execute on a small test graph:
+To verify the three FEATHER weighting modes on the canonical four-node teaching graph:
 
 ```bash
 pixi run smoke-feather
 ```
 
-Expected output:
+The smoke test checks:
+
+- `FEATHER`: topology-only random-walk probabilities
+- `UrbanFEATHER`: inverse-edge-length random-walk probabilities
+- `UrbanFEATHER_edgeCost_accessScore`: additive edge-cost + destination-accessibility probabilities
+- exact transition matrices for the teaching graph
+- transition-row sums
+- finite embeddings
+- expected embedding dimensions
+- invalid `alpha` / `beta` validation
+- negative-accessibility validation
+
+The canonical teaching graph is:
 
 ```text
-shape: (4, 4)
-finite: True
+A-B = 1
+A-C = 3
+B-C = 5
+B-D = 2
+C-D = 1
 ```
 
-The FEATHER smoke test uses:
+The diagonal `B-C` edge with length `5` is part of the graph.
+
+The smoke-test feature matrix contains two raw accessibility features per node:
+
+```text
+School
+Shops
+```
+
+They are generated with the same teaching setup used by the marimo weighting lab. The default feature rule is the sum of inverse network distances to amenities, so:
+
+```text
+closer amenity -> smaller distance -> larger raw X value
+```
+
+The smoke test currently uses:
 
 - 4 nodes
-- 1 input feature
-- 2 characteristic-function evaluation points
-- random-walk order 1
+- 5 edges
+- 2 raw accessibility features
+- 3 characteristic-function evaluation points
+- random-walk order 2
 
 This gives an embedding dimension of:
 
 ```text
-1 feature × 2 evaluation points × 2 (cosine/sine) × 1 order = 4
+2 features x 3 evaluation points x 2 (cosine/sine) x 2 orders = 24
 ```
+
+and therefore an embedding shape of:
+
+```text
+(4, 24)
+```
+
+## Experimental transition-weighting modes
+
+The node-level `FEATHER` class now supports three transition weighting modes through `args.weighting_mode`.
+These are the only accepted mode strings, and they are case-sensitive.
+
+### 1. FEATHER
+
+```python
+args.weighting_mode = "FEATHER"
+```
+
+This is the topology-only version. Existing edge weights/lengths are ignored when the transition matrix is built.
+
+For a source node `i`, every connected neighbour receives an equal share:
+
+```text
+P(i -> j) = 1 / degree(i)
+```
+
+### 2. UrbanFEATHER
+
+```python
+args.weighting_mode = "UrbanFEATHER"
+```
+
+This preserves the current UrbanFEATHER behaviour.
+
+Each street length is first converted to an inverse-length strength:
+
+```text
+edge_strength(i,j) = 1 / length(i,j)
+```
+
+The strengths are then normalized across the outgoing neighbours of each source node:
+
+```text
+edge_share(i,j)
+    = edge_strength(i,j)
+      / sum(edge_strength(i,k) for k in neighbours(i))
+```
+
+Therefore shorter edges receive a larger random-walk probability.
+
+### 3. UrbanFEATHER_edgeCost_accessScore
+
+```python
+args.weighting_mode = "UrbanFEATHER_edgeCost_accessScore"
+```
+
+This is an experimental extension. It combines two preferences:
+
+1. relative inverse edge length
+2. relative accessibility of the destination node
+
+The edge component is the same normalized inverse-length probability used by UrbanFEATHER:
+
+```text
+edge_share(i,j)
+```
+
+The destination accessibility score is computed from the ORIGINAL raw feature vector `X`, before theta/cosine/sine encoding.
+
+The current modelling choice is:
+
+```text
+access_score(j) = mean(X[j, :])
+```
+
+For example, with School and Shops features:
+
+```text
+access_score(A) = mean([School_A, Shops_A])
+```
+
+This use of the mean is deliberate and simple, but it is a modelling choice rather than a requirement of FEATHER. It can be replaced later if experiments justify a different aggregation rule.
+
+For a source node `i`, destination accessibility is normalized only across nodes directly connected to `i`:
+
+```text
+access_share(i,j)
+    = access_score(j)
+      / sum(access_score(k) for k in neighbours(i))
+```
+
+The final transition probability is additive:
+
+```text
+A_tilde_new(i,j)
+    = alpha * edge_share(i,j)
+    + beta  * access_share(i,j)
+```
+
+The code uses:
+
+```python
+args.edge_alpha = 0.5
+args.access_beta = 0.5
+```
+
+as the default teaching values for the experimental mode.
+
+**Important:**
+
+```text
+alpha + beta MUST equal 1.0
+```
+
+Both values must also be non-negative. The implementation raises a `ValueError` if these requirements are not met.
+
+This makes `alpha` and `beta` easy to change while preserving a transition row that can still be interpreted as a probability distribution.
+
+Examples:
+
+```text
+alpha = 1.0, beta = 0.0
+-> edge cost only
+
+alpha = 0.5, beta = 0.5
+-> equal edge-cost and accessibility contribution
+
+alpha = 0.2, beta = 0.8
+-> destination accessibility has more influence
+```
+
+### Accessibility assumptions
+
+`UrbanFEATHER_edgeCost_accessScore` assumes raw accessibility features are:
+
+- finite
+- non-negative
+- larger when a node is more accessible / desirable
+
+This works naturally with the current teaching feature rule based on inverse distance.
+
+The original Pandana-generated UrbanFEATHER features appear to encode distance, where a smaller value is better. Those values should therefore be transformed into a higher-is-better accessibility score before using this weighting mode directly.
+
+If all directly connected destination nodes have accessibility score `0`, the accessibility component falls back to the normal UrbanFEATHER edge probabilities for that source-node row.
+
+### Accessibility is used in two places
+
+In the experimental method, accessibility affects the model twice:
+
+1. raw `X` is used to influence where the random walk prefers to move
+2. the same raw `X` is transformed into `X0` and propagated as FEATHER information
+
+Conceptually:
+
+```text
+raw X
+ |\
+ | \-> mean accessibility -> access_share --\
+ |                                        +--> A_tilde_new
+ +-> theta -> cos/sin -> X0              /
+                         |               /
+                         +-- A_tilde_new --> X1 -> X2 -> ...
+```
+
+This is intentional for the experiment, but it can amplify the effect of highly accessible nodes. It should therefore be evaluated with ablations rather than assumed to be automatically better.
+
+### Backwards-compatible default
+
+If `args.weighting_mode` is not supplied, the node-level implementation defaults to:
+
+```text
+UrbanFEATHER
+```
+
+This preserves the current UrbanFEATHER behaviour for existing callers that only provide:
+
+```python
+args.theta_max
+args.eval_points
+args.order
+```
+
+### Example
+
+```python
+from types import SimpleNamespace
+
+args = SimpleNamespace(
+    theta_max=2.0,
+    eval_points=3,
+    order=2,
+    weighting_mode="UrbanFEATHER_edgeCost_accessScore",
+    edge_alpha=0.5,
+    access_beta=0.5,
+)
+
+model = FEATHER()
+model.fit(graph, raw_features, args)
+embedding = model.get_embedding()
+A_tilde = model.get_transition_matrix()
+```
+
+## Marimo
+
+Marimo is available through the Pixi environment for interactive exploration and experimentation.
+
+### `marimo edit` versus `marimo run`
+
+Use `edit` when you want to open the notebook editor, change cells, move through the calculations interactively, and save changes:
+
+```bash
+pixi run marimo edit notebooks/marimo/NAME.py
+```
+
+Use `run` when you only want to launch the notebook as an app without the editing interface:
+
+```bash
+pixi run marimo run notebooks/marimo/NAME.py
+```
+
+In short:
+
+```text
+marimo edit -> develop and edit the notebook
+marimo run  -> use the notebook as an app
+```
+
+The Pixi task aliases already defined in `pixi.toml` are also available:
+
+```bash
+pixi run marimo-edit
+pixi run marimo-run
+pixi run weighting-lab
+pixi run weighting-lab-run
+```
+
+### Marimo notebooks in this project
+
+The `notebooks/marimo/` folder contains:
+
+- `feather_smoke.py` - a minimal notebook that runs a small FEATHER example and displays the embedding.
+- `feather_sandbox.py` - an interactive playground for inspecting FEATHER calculations and parameters.
+- `urbanfeather_sandbox.py` - a visual explanation of the current inverse-edge-length UrbanFEATHER calculation.
+- `feather_vs_urbanfeather_math_lab.py` - a step-by-step mathematical comparison of topology-only FEATHER and UrbanFEATHER.
+- `feather_weighting_modes_lab.py` - the new teaching lab comparing `FEATHER`, `UrbanFEATHER`, and `UrbanFEATHER_edgeCost_accessScore`, including `alpha` and `beta`.
+
+The weighting lab uses the same canonical A/B/C/D graph as the smoke test and shows the raw feature matrix, edge-cost share, destination-accessibility share, all three transition matrices, characteristic-function encoding, propagation orders, and final embedding dimensions.
+
+Reusable project logic should remain in regular Python modules under `src/`; marimo is intended as an interactive layer rather than the only location for important implementation logic.
+
+The current FEATHER integration still uses the legacy source layout, so the marimo notebooks adjust `sys.path` to import the bundled FEATHER implementation without refactoring it.
 
 ### Python version
 
@@ -112,7 +394,7 @@ The environment setup follows the project principle:
 
 > Reproduce first, improve second.
 
-The current goal is to reproduce the existing UrbanFeather codebase reliably before modernizing package versions, restructuring modules, or changing the FEATHER implementation.
+The current weighting work is isolated behind an explicit `weighting_mode` so the existing UrbanFEATHER behaviour remains available as a baseline while the experimental method is evaluated.
 
 ## Acknowledgments
 
@@ -123,33 +405,6 @@ Their work provided the foundation for the UrbanFeather codebase used and extend
 The project also builds on the original FEATHER method by Benedek Rozemberczki and Rik Sarkar.
 
 For citation details of the predecessor project, see the included `CITATION.cff` file.
-
-
-## Marimo
-
-Marimo is available through the Pixi environment for interactive exploration and experimentation.
-
-Launch the FEATHER smoke notebook in edit mode:
-
-```bash
-pixi run marimo-edit
-```
-
-Run it as an app:
-
-```bash
-pixi run marimo-run
-```
-
-The current marimo notebooks are stored under:
-
-```text
-notebooks/marimo/
-```
-
-Reusable project logic should remain in regular Python modules under `src/`; marimo is intended as an interactive layer rather than the only location for important implementation logic.
-
-The current FEATHER integration still uses the legacy source layout, so the marimo smoke notebook adjusts `sys.path` to import the bundled FEATHER implementation without refactoring it.
 
 # Old README.md
 <img src="feather_order_4.png" alt="This image shows a map with magnitude values calculated from the Feather ML-Algorithm. on the right side is the moving (transport) to the left is all Amenity nodes combined" >
@@ -212,14 +467,13 @@ cd FGSAM-FEATHER-Graph-summaries-of-accessibility-maps/src/Utils
 
 #3. Run the OSM to Feather Converter
 # The following command downloads and processes map data for Daegu, South Korea and stores the generated project files in the projects directory.
-
-
 ```
 
 If you are having trouble with the module utils not getting reconized/found write this command into the terminal
+
 ```bash
-  # make current terminal's python session reconize your internal modules
-  export PYTHONPATH=$PYTHONPATH:$(pwd)/FEATHER/src
+# make current terminal's python session reconize your internal modules
+export PYTHONPATH=$PYTHONPATH:$(pwd)/FEATHER/src
 ```
 
 >[!NOTE]
@@ -227,22 +481,21 @@ If you are having trouble with the module utils not getting reconized/found writ
 >Internet access is required to fetch OpenStreetMap data.
 >Large locations may take additional processing time depending on system performance. and Overpass API status
 
-
 ## User Guide
 
 ### Automation.sh and or OSM2FeatherConverter.py
 
 `OSM2FeatherConverter.py` handles the full OSM processing pipeline, including querying OpenStreetMap data through the Overpass API, formatting the data, computing FEATHER metrics, and generating plots. But a eaiser way of using it and get a overview would be using the Automation.sh scripts in the Utils directory. src/Utils/Automation.sh
 
- 
-
 Pipeline overview:
 
+```text
+Input -> Overpass API -> Formatting -> FEATHER Computing -> Plotting
 ```
-Input → Overpass API → Formatting → FEATHER Computing → Plotting
-```
-Run the whole pipine with the bash script
-You can edit diffrent parameters easily in the script
+
+Run the whole pipine with the bash script.
+You can edit diffrent parameters easily in the script.
+
 ```bash
 bash Automation.sh
 ```
@@ -331,11 +584,12 @@ python OSM2FeatherConverter.py \
     --title "example_project"
 ```
 
-
 The options for FEATHER can be found here: https://github.com/benedekrozemberczki/FEATHER/blob/master/README.md
 
 ### Graphs
+
 OSM to feather conversion pipeline
+
 <img src="OSM Network Processing.png" alt="This is a diagram over the pipline process of the convertion" >
 
 ## Literature
@@ -351,9 +605,5 @@ OSM to feather conversion pipeline
 
 ## License
 
-This project is intended for academic and research purposes. Licensing details will be added  once finalised.
-
-
-
-
+This project is intended for academic and research purposes. Licensing details will be added once finalised.
 

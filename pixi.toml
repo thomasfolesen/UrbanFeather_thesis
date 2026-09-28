@@ -59,3 +59,7 @@ python src/Utils/OSM2FeatherConverter.py \
 
 marimo-edit = "marimo edit notebooks/marimo/feather_smoke.py"
 marimo-run = "marimo run notebooks/marimo/feather_smoke.py"
+
+# Experimental weighting-mode teaching app.
+weighting-lab = "marimo edit notebooks/marimo/feather_weighting_modes_lab.py"
+weighting-lab-run = "marimo run notebooks/marimo/feather_weighting_modes_lab.py"
